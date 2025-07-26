@@ -1,0 +1,14 @@
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris-fastapi-service # Service ka naam
+  namespace: iris-classifier # Jis namespace mein service banani hai
+spec:
+  selector:
+    app: iris-fastapi # Yeh labels deployment ke pods ke labels se match hone chahiye
+  type: LoadBalancer # Internet se access ke liye LoadBalancer type use karein
+  ports:
+    - protocol: TCP
+      port: 80 # LoadBalancer ka external port (users is port par access karenge)
+      targetPort: 8200 # Container ke andar ka port jis par FastAPI run kar rahi hai

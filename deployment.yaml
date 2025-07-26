@@ -1,0 +1,29 @@
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iris-fastapi-deployment # Deployment ka naam
+  namespace: iris-classifier   # Jis namespace mein deploy karna hai (agar aapne banaya hai)
+spec:
+  replicas: 1 # Aap kitni copies (pods) run karna chahte hain
+  selector:
+    matchLabels:
+      app: iris-fastapi # Labels jo pods ko identify karenge
+  template:
+    metadata:
+      labels:
+        app: iris-fastapi # Pod ke labels
+    spec:
+      containers:
+      - name: iris-fastapi-container # Container ka naam
+        image: us-central1-docker.pkg.dev/cogent-jetty-459317-k3/my-repo/iris_api:latest # Aapki Artifact Registry Docker image
+        ports:
+        - containerPort: 8200 # Container ke andar ka port jis par FastAPI run kar rahi hai (Dockerfile CMD se)
+        # Optional: Resource limits aur requests add kar sakte hain
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

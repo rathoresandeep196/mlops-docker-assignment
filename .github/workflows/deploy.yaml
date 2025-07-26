@@ -17,7 +17,7 @@
           REGION: us-central1
           REPOSITORY: my-repo
           IMAGE_NAME: iris_api
-          GKE_CLUSTER: test-iris-v1
+          GKE_CLUSTER: cluster-1
           GKE_ZONE: us-central1-a # Apne GKE cluster ka zone yahan update karein
           NAMESPACE: iris-classifier
 

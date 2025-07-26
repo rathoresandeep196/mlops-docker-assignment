@@ -13,13 +13,13 @@ jobs:
       id-token: 'write' # Workload Identity Federation ke liye zaroori hai
 
     env:
-      PROJECT_ID: cogent-jetty-459317-k3 # Apni Google Cloud Project ID yahan update karein
+      PROJECT_ID: cogent-jetty-459317-k3 # Aapki Google Cloud Project ID
       REGION: us-central1 # Aapki Artifact Registry aur GKE cluster ka region
       REPOSITORY: my-repo # Aapki Artifact Registry repository ka naam
       IMAGE_NAME: iris_api # Aapki Docker image ka naam
       GKE_CLUSTER: test-iris-v1 # Aapke GKE cluster ka naam
-      GKE_ZONE: us-central1-a # Apne GKE cluster ka zone yahan update karein (e.g., us-central1-a)
-      NAMESPACE: iris-classifier # Kubernetes namespace jahan deploy karna hai
+      GKE_ZONE: us-central1-a # Aapke GKE cluster ka zone (agar aapka cluster kisi aur zone mein hai, to ise badalna padega)
+      NAMESPACE: iris-classifier # Kubernetes namespace
 
     steps:
       - name: Checkout code
@@ -29,10 +29,8 @@ jobs:
         id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
-          # Apni Project Number yahan update karein.
-          # Yeh command se milegi: gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)'
-          # Example: 'projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          workload_identity_provider: 'projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          # Aapka Project Number yahan fill kiya gaya hai
+          workload_identity_provider: 'projects/455380621952/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: 'github-actions-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
 
       # CML setup (optional, agar aapko CML features jaise reports chahiye)

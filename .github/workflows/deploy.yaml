@@ -17,7 +17,7 @@ jobs:
       REGION: us-central1
       REPOSITORY: my-repo
       IMAGE_NAME: iris_api
-      GKE_CLUSTER: cluster-1
+      GKE_CLUSTER: test-iris-v1
       GKE_ZONE: us-central1-a # Apne GKE cluster ka zone yahan update karein
       NAMESPACE: iris-classifier
 
@@ -37,7 +37,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apt-transport-https ca-certificates gnupg
           echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl https://packages.cloud.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
       # --- Updated Step End ---
@@ -69,8 +69,8 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
-          # Deployment YAML
-          cat <<EOF | kubectl apply -f -
+          # Deployment YAML को एक temporary file में सेव करें
+          cat > deployment.yaml <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -91,10 +91,6 @@ spec:
         image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
         ports:
         - containerPort: 8200
-EOF
-
-          # Service YAML
-          cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Service
 metadata:
@@ -109,6 +105,8 @@ spec:
       port: 80
       targetPort: 8200
 EOF
+          # Service को अप्लाई करें
+          kubectl apply -f service.yaml
 
           echo "Waiting for LoadBalancer IP..."
           kubectl wait --for=condition=ready service/iris-fastapi-service --timeout=300s -n ${{ env.NAMESPACE }}

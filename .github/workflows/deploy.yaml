@@ -37,7 +37,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apt-transport-https ca-certificates gnupg
           echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          curl https://packages.cloud.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
           sudo apt-get update
           sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
       # --- Updated Step End ---
@@ -50,8 +50,8 @@ jobs:
 
       - name: Build and push Docker image to Artifact Registry
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest . # Fixed: Added env.
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest # Fixed: Added env.
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Set up Kubeconfig for GKE
         run: |
@@ -69,58 +69,60 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
+          # Deployment YAML
           cat <<EOF | kubectl apply -f -
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: iris-fastapi-deployment
-            namespace: ${{ env.NAMESPACE }}
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: iris-fastapi
-            template:
-              metadata:
-                labels:
-                  app: iris-fastapi
-              spec:
-                containers:
-                - name: iris-fastapi-container
-                  image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
-                  ports:
-                  - containerPort: 8200
-              EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iris-fastapi-deployment
+  namespace: ${{ env.NAMESPACE }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iris-fastapi
+  template:
+    metadata:
+      labels:
+        app: iris-fastapi
+    spec:
+      containers:
+      - name: iris-fastapi-container
+        image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+        ports:
+        - containerPort: 8200
+EOF
 
-              cat <<EOF | kubectl apply -f -
-              apiVersion: v1
-              kind: Service
-              metadata:
-                name: iris-fastapi-service
-                namespace: ${{ env.NAMESPACE }}
-              spec:
-                selector:
-                  app: iris-fastapi
-                type: LoadBalancer
-                ports:
-                  - protocol: TCP
-                    port: 80
-                    targetPort: 8200
-              EOF
+          # Service YAML
+          cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris-fastapi-service
+  namespace: ${{ env.NAMESPACE }}
+spec:
+  selector:
+    app: iris-fastapi
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8200
+EOF
 
-              echo "Waiting for LoadBalancer IP..."
-              kubectl wait --for=condition=ready service/iris-fastapi-service --timeout=300s -n ${{ env.NAMESPACE }}
-              EXTERNAL_IP=$(kubectl get service iris-fastapi-service -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-              echo "Iris API deployed and accessible at: http://$EXTERNAL_IP"
+          echo "Waiting for LoadBalancer IP..."
+          kubectl wait --for=condition=ready service/iris-fastapi-service --timeout=300s -n ${{ env.NAMESPACE }}
+          EXTERNAL_IP=$(kubectl get service iris-fastapi-service -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "Iris API deployed and accessible at: http://$EXTERNAL_IP"
 
-          - name: Generate CML Report
-            if: always()
-            run: |
-              echo "## CD Pipeline Report" >> report.md
-              echo "Deployment Status: Successfully deployed to GKE." >> report.md
-              echo "Container Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest" >> report.md
-              echo "GKE Cluster: ${{ env.GKE_CLUSTER }} in ${{ env.GKE_ZONE }}" >> report.md
-              echo "Namespace: ${{ env.NAMESPACE }}" >> report.md
-              echo "---" >> report.md
-              echo "Kubernetes Service IP (if available): http://$EXTERNAL_IP" >> report.md
-              cml comment create report.md
+      - name: Generate CML Report
+        if: always()
+        run: |
+          echo "## CD Pipeline Report" >> report.md
+          echo "Deployment Status: Successfully deployed to GKE." >> report.md
+          echo "Container Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest" >> report.md
+          echo "GKE Cluster: ${{ env.GKE_CLUSTER }} in ${{ env.GKE_ZONE }}" >> report.md
+          echo "Namespace: ${{ env.NAMESPACE }}" >> report.md
+          echo "---" >> report.md
+          echo "Kubernetes Service IP (if available): http://$EXTERNAL_IP" >> report.md
+          cml comment create report.md

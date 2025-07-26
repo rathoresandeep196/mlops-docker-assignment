@@ -1,130 +1,122 @@
-name: CI/CD for Iris FastAPI on GKE
+    name: CI/CD for Iris FastAPI on GKE
 
-on:
-  push:
-    branches:
-      - main # Jab bhi main branch par code push ho, yeh workflow run hoga
+    on:
+      push:
+        branches:
+          - main
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest # GitHub-hosted runner
-    permissions:
-      contents: 'read'
-      id-token: 'write' # Workload Identity Federation ke liye zaroori hai
+    jobs:
+      deploy:
+        runs-on: ubuntu-latest
+        # permissions: # <--- Is section ko yahan se hata dein ya comment out kar dein
+        #   contents: 'read'
+        #   id-token: 'write' # Workload Identity Federation ke liye zaroori tha
 
-    env:
-      PROJECT_ID: cogent-jetty-459317-k3 # Aapki Google Cloud Project ID
-      REGION: us-central1 # Aapki Artifact Registry aur GKE cluster ka region
-      REPOSITORY: my-repo # Aapki Artifact Registry repository ka naam
-      IMAGE_NAME: iris_api # Aapki Docker image ka naam
-      GKE_CLUSTER: test-iris-v1 # Aapke GKE cluster ka naam
-      GKE_ZONE: us-central1-a # Aapke GKE cluster ka zone (agar aapka cluster kisi aur zone mein hai, to ise badalna padega)
-      NAMESPACE: iris-classifier # Kubernetes namespace
+        env:
+          PROJECT_ID: cogent-jetty-459317-k3
+          REGION: us-central1
+          REPOSITORY: my-repo
+          IMAGE_NAME: iris_api
+          GKE_CLUSTER: test-iris-v1
+          GKE_ZONE: us-central1-a # Apne GKE cluster ka zone yahan update karein
+          NAMESPACE: iris-classifier
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        id: 'auth'
-        uses: 'google-github-actions/auth@v2'
-        with:
-          # Aapka Project Number yahan fill kiya gaya hai
-          workload_identity_provider: 'projects/455380621952/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-actions-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
+          - name: Authenticate to Google Cloud (using Service Account Key) # <--- Naam badla
+            id: 'auth'
+            uses: 'google-github-actions/auth@v2'
+            with:
+              # <--- Yahan workload_identity_provider aur service_account ko hata dein
+              # service_account_key: ${{ secrets.GCP_SA_KEY }} # <--- Nayi line add karein
+              credentials_json: ${{ secrets.GCP_SA_KEY }} # <--- Correct parameter name
 
-      # CML setup (optional, agar aapko CML features jaise reports chahiye)
-      - name: Setup CML
-        uses: iterative/setup-cml@v2
+          # Baaki steps wahi rahenge
+          - name: Setup CML
+            uses: iterative/setup-cml@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          - name: Set up Docker Buildx
+            uses: docker/setup-buildx-action@v3
 
-      - name: Configure Docker to use Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+          - name: Configure Docker to use Artifact Registry
+            run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
-      - name: Build and push Docker image to Artifact Registry
-        run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest .
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          - name: Build and push Docker image to Artifact Registry
+            run: |
+              docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest .
+              docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
 
-      - name: Set up Kubeconfig for GKE
-        # GitHub Secret KUBE_CONFIG_DATA ka use karein jo aapne banaya tha
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG_DATA }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-          # Verify kubectl can connect (optional)
-          kubectl config get-contexts
+          - name: Set up Kubeconfig for GKE
+            run: |
+              mkdir -p ~/.kube
+              echo "${{ secrets.KUBE_CONFIG_DATA }}" > ~/.kube/config
+              chmod 600 ~/.kube/config
 
-      - name: Get GKE credentials (alternative/supplementary if KUBE_CONFIG_DATA method doesn't work)
-        # Agar Workload Identity sahi se set hai, to yeh service account ke through credentials fetch karega
-        # Make sure the service account has container.developer role
-        run: |
-          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone=${{ env.GKE_ZONE }} --project=${{ env.PROJECT_ID }}
+          - name: Get GKE credentials
+            run: |
+              gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone=${{ env.GKE_ZONE }} --project=${{ env.PROJECT_ID }}
 
-      - name: Ensure Kubernetes Namespace exists
-        run: |
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          - name: Ensure Kubernetes Namespace exists
+            run: |
+              kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy to Kubernetes
-        run: |
-          # Create or update Deployment for your FastAPI app
-          cat <<EOF | kubectl apply -f -
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: iris-fastapi-deployment
-            namespace: ${{ env.NAMESPACE }}
-          spec:
-            replicas: 1 # Aap kitni copies run karna chahte hain
-            selector:
-              matchLabels:
-                app: iris-fastapi
-            template:
+          - name: Deploy to Kubernetes
+            run: |
+              cat <<EOF | kubectl apply -f -
+              apiVersion: apps/v1
+              kind: Deployment
               metadata:
-                labels:
-                  app: iris-fastapi
+                name: iris-fastapi-deployment
+                namespace: ${{ env.NAMESPACE }}
               spec:
-                containers:
-                - name: iris-fastapi-container
-                  image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
-                  ports:
-                  - containerPort: 8200 # Dockerfile CMD ke hisaab se
-          EOF
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: iris-fastapi
+                template:
+                  metadata:
+                    labels:
+                      app: iris-fastapi
+                  spec:
+                    containers:
+                    - name: iris-fastapi-container
+                      image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+                      ports:
+                      - containerPort: 8200
+              EOF
 
-          # Create or update Service (LoadBalancer) to expose your app
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: iris-fastapi-service
-            namespace: ${{ env.NAMESPACE }}
-          spec:
-            selector:
-              app: iris-fastapi
-            type: LoadBalancer
-            ports:
-              - protocol: TCP
-                port: 80 # LoadBalancer ka external port (internet se access ke liye)
-                targetPort: 8200 # Container ke andar ka port
-          EOF
+              cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: iris-fastapi-service
+                namespace: ${{ env.NAMESPACE }}
+              spec:
+                selector:
+                  app: iris-fastapi
+                type: LoadBalancer
+                ports:
+                  - protocol: TCP
+                    port: 80
+                    targetPort: 8200
+              EOF
 
-          echo "Waiting for LoadBalancer IP..."
-          # LoadBalancer ko external IP milne ka wait karein
-          kubectl wait --for=condition=ready service/iris-fastapi-service --timeout=300s -n ${{ env.NAMESPACE }}
-          EXTERNAL_IP=$(kubectl get service iris-fastapi-service -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-          echo "Iris API deployed and accessible at: http://$EXTERNAL_IP"
+              echo "Waiting for LoadBalancer IP..."
+              kubectl wait --for=condition=ready service/iris-fastapi-service --timeout=300s -n ${{ env.NAMESPACE }}
+              EXTERNAL_IP=$(kubectl get service iris-fastapi-service -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+              echo "Iris API deployed and accessible at: http://$EXTERNAL_IP"
 
-      # Optional: CML report generation (GitHub PR comments mein report add karega)
-      - name: Generate CML Report
-        if: always()
-        run: |
-          echo "## CD Pipeline Report" >> report.md
-          echo "Deployment Status: Successfully deployed to GKE." >> report.md
-          echo "Container Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest" >> report.md
-          echo "GKE Cluster: ${{ env.GKE_CLUSTER }} in ${{ env.GKE_ZONE }}" >> report.md
-          echo "Namespace: ${{ env.NAMESPACE }}" >> report.md
-          echo "---" >> report.md
-          echo "Kubernetes Service IP (if available): http://$EXTERNAL_IP" >> report.md
-          cml comment create report.md
+          - name: Generate CML Report
+            if: always()
+            run: |
+              echo "## CD Pipeline Report" >> report.md
+              echo "Deployment Status: Successfully deployed to GKE." >> report.md
+              echo "Container Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest" >> report.md
+              echo "GKE Cluster: ${{ env.GKE_CLUSTER }} in ${{ env.GKE_ZONE }}" >> report.md
+              echo "Namespace: ${{ env.NAMESPACE }}" >> report.md
+              echo "---" >> report.md
+              echo "Kubernetes Service IP (if available): http://$EXTERNAL_IP" >> report.md
+              cml comment create report.md
+    

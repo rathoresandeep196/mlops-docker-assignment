@@ -1,34 +1,52 @@
-name: Deploy to GKE
+name: Deploy FastAPI to GKE
 
 on:
   push:
     branches:
-      - main
+      - main  # ya master
+
+env:
+  PROJECT_ID: cogent-jetty-459317-k3
+  PROJECT_NUMBER: 455380621952
+  GAR_LOCATION: us-central1  # change if your region is different
+  CLUSTER_NAME: cluster-1
+  CLUSTER_ZONE: us-central1-a  # change if your cluster is in different zone
+  DEPLOYMENT_NAME: iris-classifier
+  IMAGE_NAME: iris-fastapi
 
 jobs:
   deploy:
-    name: Deploy to GKE
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Authenticate to Google Cloud
+    - name: Authenticate with Google Cloud
       uses: google-github-actions/auth@v1
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Set up Google Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
 
-    - name: Configure kubectl
+    - name: Configure Docker to use gcloud
+      run: gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+
+    - name: Build Docker image
       run: |
-        gcloud container clusters get-credentials cluster-1 \
-          --zone us-central1-a \
-          --project cogent-jetty-459317-k3
+        docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/default/${{ env.IMAGE_NAME }}:latest .
+
+    - name: Push Docker image to Artifact Registry
+      run: |
+        docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/default/${{ env.IMAGE_NAME }}:latest
+
+    - name: Get GKE credentials
+      run: |
+        gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.CLUSTER_ZONE }} --project ${{ env.PROJECT_ID }}
 
     - name: Deploy to GKE
       run: |
-        kubectl apply -f k8s/deployment.yaml
-        kubectl apply -f k8s/service.yaml
+        kubectl create namespace ${{ env.DEPLOYMENT_NAME }} --dry-run=client -o yaml | kubectl apply -f -
+        kubectl apply -f k8s/deployment.yaml -n ${{ env.DEPLOYMENT_NAME }}
+        kubectl apply -f k8s/service.yaml -n ${{ env.DEPLOYMENT_NAME }}

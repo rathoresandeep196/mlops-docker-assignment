@@ -48,5 +48,5 @@ jobs:
     - name: Deploy to GKE
       run: |
         kubectl create namespace ${{ env.DEPLOYMENT_NAME }} --dry-run=client -o yaml | kubectl apply -f -
-        kubectl apply -f k8s/deployment.yaml -n ${{ env.DEPLOYMENT_NAME }}
-        kubectl apply -f k8s/service.yaml -n ${{ env.DEPLOYMENT_NAME }}
+        kubectl apply -f deployment.yaml -n ${{ env.DEPLOYMENT_NAME }}
+        kubectl apply -f service.yaml -n ${{ env.DEPLOYMENT_NAME }}
